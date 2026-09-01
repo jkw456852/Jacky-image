@@ -1,0 +1,36 @@
+const path = require('node:path');
+const { autoUpdater } = require('electron-updater');
+
+function createUpdateManager({ app, getMainWindow, stopBackend, beginUpdateQuit, writeLog }) {
+  let state = { status: 'idle', currentVersion: app.getVersion(), availableVersion: null, progress: null, error: null };
+  const publish = patch => {
+    state = { ...state, ...patch };
+    const window = getMainWindow();
+    if (window && !window.isDestroyed()) window.webContents.send('jacky:update:state', state);
+  };
+  autoUpdater.logger = {
+    info: message => writeLog('Updater', String(message)),
+    warn: message => writeLog('Updater', `WARN ${message}`),
+    error: message => writeLog('Updater', `ERROR ${message}`),
+    debug: message => writeLog('Updater', String(message)),
+  };
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = false;
+  autoUpdater.allowDowngrade = false;
+  autoUpdater.disableDifferentialDownload = false;
+  if (process.platform === 'win32' && app.isPackaged) autoUpdater.installDirectory = path.dirname(process.execPath);
+  autoUpdater.on('checking-for-update', () => publish({ status: 'checking', error: null }));
+  autoUpdater.on('update-available', info => publish({ status: 'available', availableVersion: info.version, progress: null, error: null }));
+  autoUpdater.on('update-not-available', info => publish({ status: 'latest', availableVersion: info?.version || null, progress: null, error: null }));
+  autoUpdater.on('download-progress', progress => publish({ status: 'downloading', progress: { percent: progress.percent, transferred: progress.transferred, total: progress.total, bytesPerSecond: progress.bytesPerSecond } }));
+  autoUpdater.on('update-downloaded', info => publish({ status: 'downloaded', availableVersion: info.version, progress: { percent: 100 }, error: null }));
+  autoUpdater.on('error', error => { writeLog('Updater', error.stack || error.message); publish({ status: 'error', error: error.message }); });
+  return {
+    getState: () => ({ ...state }),
+    check: async () => { if (!app.isPackaged || process.platform !== 'win32') return { ok: false, reason: 'Updates require a packaged Windows build' }; await autoUpdater.checkForUpdates(); return { ok: true }; },
+    download: async () => { await autoUpdater.downloadUpdate(); return { ok: true }; },
+    install: async () => { await stopBackend(); beginUpdateQuit(); autoUpdater.quitAndInstall(false, true); return { ok: true }; },
+  };
+}
+
+module.exports = { createUpdateManager };
