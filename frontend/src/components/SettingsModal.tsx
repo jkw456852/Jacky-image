@@ -66,6 +66,17 @@ interface SettingsModalProps {
   onApiKeyChange?: (hasKey: boolean) => void;
 }
 
+type UpdateState = {
+  status: string;
+  currentVersion?: string;
+  availableVersion?: string | null;
+  releaseName?: string | null;
+  releaseNotes?: string | null;
+  releaseDate?: string | null;
+  progress?: { percent?: number } | null;
+  error?: string | null;
+};
+
 function cloneImageModel(model: ImageModelConfig): ImageModelConfig {
   return { ...model };
 }
@@ -183,6 +194,8 @@ export function SettingsModal({ isOpen, onClose, onApiKeyChange }: SettingsModal
   const [storageSaving, setStorageSaving] = useState(false);
   const [storageError, setStorageError] = useState<string | null>(null);
   const [storageSuccess, setStorageSuccess] = useState<string | null>(null);
+  const [updateState, setUpdateState] = useState<UpdateState | null>(null);
+  const [updateBusy, setUpdateBusy] = useState(false);
 
   const [backupProgress, setBackupProgress] = useState<BackupProgressType>({ percent: 0, message: '' });
   const [isBackupActive, setIsBackupActive] = useState(false);
@@ -207,7 +220,28 @@ export function SettingsModal({ isOpen, onClose, onApiKeyChange }: SettingsModal
     setStoragePaths(window.jackyDesktop?.storage.get() || null);
     setStorageError(null);
     setStorageSuccess(null);
+    void window.jackyDesktop?.updates?.getState().then(setUpdateState).catch(() => undefined);
   }, [isOpen]);
+
+  useEffect(() => {
+    const updates = window.jackyDesktop?.updates;
+    if (!isOpen || !updates) return;
+    return updates.onState(setUpdateState);
+  }, [isOpen]);
+
+  const checkForUpdates = async () => {
+    const updates = window.jackyDesktop?.updates;
+    if (!updates) return;
+    setUpdateBusy(true);
+    try { await updates.check(); } finally { setUpdateBusy(false); }
+  };
+
+  const downloadUpdate = async () => {
+    const updates = window.jackyDesktop?.updates;
+    if (!updates) return;
+    setUpdateBusy(true);
+    try { await updates.download(); } finally { setUpdateBusy(false); }
+  };
 
   useEffect(() => {
     if (!isOpen) return;
@@ -888,7 +922,21 @@ export function SettingsModal({ isOpen, onClose, onApiKeyChange }: SettingsModal
 
           <TabsContent value="about" className="min-h-0 overflow-y-auto p-4 sm:p-6 space-y-4 mt-0">
             <div className="space-y-4 text-sm">
-              <h3 className="text-lg font-medium">Jacky Image <span className="text-xs text-muted-foreground font-normal">v{process.env.NEXT_PUBLIC_APP_VERSION}</span></h3>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h3 className="text-lg font-medium">Jacky Image <span className="text-xs text-muted-foreground font-normal">v{updateState?.currentVersion || process.env.NEXT_PUBLIC_APP_VERSION}</span></h3>
+                <Button type="button" variant="outline" size="sm" onClick={checkForUpdates} disabled={updateBusy || updateState?.status === 'checking'} className="gap-2">
+                  <RefreshCw className={`h-4 w-4 ${updateState?.status === 'checking' ? 'animate-spin' : ''}`} />
+                  检查更新
+                </Button>
+              </div>
+              <div className="rounded-lg border p-4 space-y-3">
+                <div className="flex items-center justify-between gap-3"><span className="font-medium">软件更新</span><span className="text-xs text-muted-foreground">{updateState?.status === 'latest' ? '已是最新版本' : updateState?.status === 'error' ? '检查失败' : updateState?.status === 'downloaded' ? '更新已下载' : updateState?.status === 'available' ? `发现 v${updateState.availableVersion}` : '尚未检查'}</span></div>
+                {updateState?.status === 'available' && <Button type="button" size="sm" onClick={downloadUpdate} disabled={updateBusy} className="gap-2"><Download className="h-4 w-4" />下载更新</Button>}
+                {updateState?.status === 'downloading' && <p className="text-xs text-muted-foreground">正在下载更新 {Math.round(updateState.progress?.percent || 0)}%</p>}
+                {updateState?.status === 'downloaded' && <Button type="button" size="sm" onClick={() => void window.jackyDesktop?.updates?.install()} className="gap-2"><Download className="h-4 w-4" />重启并安装</Button>}
+                {updateState?.status === 'error' && <p className="text-xs text-destructive">{updateState.error}</p>}
+                {updateState?.releaseNotes && <div className="rounded-md bg-muted/50 p-3"><p className="mb-1 text-xs font-medium">{updateState.releaseName || `v${updateState.availableVersion} 更新内容`}</p><div className="whitespace-pre-wrap text-xs leading-5 text-muted-foreground">{typeof updateState.releaseNotes === 'string' ? updateState.releaseNotes : JSON.stringify(updateState.releaseNotes)}</div></div>}
+              </div>
               <details className="group rounded-lg bg-muted/50 p-3">
                 <summary className="flex cursor-pointer select-none items-center gap-2 font-medium">
                   <span className="text-[10px] opacity-60 transition-transform group-open:rotate-90">▶</span>

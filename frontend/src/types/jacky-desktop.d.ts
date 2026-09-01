@@ -117,11 +117,11 @@ declare global {
         save: (fileName: string, bytes: ArrayBuffer) => Promise<{ ok: boolean; filePath?: string; error?: string }>;
       };
       updates: {
-        getState: () => Promise<{ status: string; currentVersion?: string; availableVersion?: string | null; progress?: { percent?: number } | null; error?: string | null }>;
+        getState: () => Promise<{ status: string; currentVersion?: string; availableVersion?: string | null; releaseName?: string | null; releaseNotes?: string | null; releaseDate?: string | null; progress?: { percent?: number } | null; error?: string | null }>;
         check: () => Promise<{ ok: boolean; reason?: string }>;
         download: () => Promise<{ ok: boolean; reason?: string }>;
         install: () => Promise<{ ok: boolean; reason?: string }>;
-        onState: (callback: (state: { status: string; currentVersion?: string; availableVersion?: string | null; progress?: { percent?: number } | null; error?: string | null }) => void) => () => void;
+        onState: (callback: (state: { status: string; currentVersion?: string; availableVersion?: string | null; releaseName?: string | null; releaseNotes?: string | null; releaseDate?: string | null; progress?: { percent?: number } | null; error?: string | null }) => void) => () => void;
       };
     };
   }

@@ -2,7 +2,7 @@ const path = require('node:path');
 const { autoUpdater } = require('electron-updater');
 
 function createUpdateManager({ app, getMainWindow, stopBackend, beginUpdateQuit, writeLog }) {
-  let state = { status: 'idle', currentVersion: app.getVersion(), availableVersion: null, progress: null, error: null };
+  let state = { status: 'idle', currentVersion: app.getVersion(), availableVersion: null, releaseName: null, releaseNotes: null, releaseDate: null, progress: null, error: null };
   const publish = patch => {
     state = { ...state, ...patch };
     const window = getMainWindow();
@@ -20,8 +20,8 @@ function createUpdateManager({ app, getMainWindow, stopBackend, beginUpdateQuit,
   autoUpdater.disableDifferentialDownload = false;
   if (process.platform === 'win32' && app.isPackaged) autoUpdater.installDirectory = path.dirname(process.execPath);
   autoUpdater.on('checking-for-update', () => publish({ status: 'checking', error: null }));
-  autoUpdater.on('update-available', info => publish({ status: 'available', availableVersion: info.version, progress: null, error: null }));
-  autoUpdater.on('update-not-available', info => publish({ status: 'latest', availableVersion: info?.version || null, progress: null, error: null }));
+  autoUpdater.on('update-available', info => publish({ status: 'available', availableVersion: info.version, releaseName: info.releaseName || null, releaseNotes: info.releaseNotes || null, releaseDate: info.releaseDate || null, progress: null, error: null }));
+  autoUpdater.on('update-not-available', info => publish({ status: 'latest', availableVersion: info?.version || null, releaseName: null, releaseNotes: null, releaseDate: null, progress: null, error: null }));
   autoUpdater.on('download-progress', progress => publish({ status: 'downloading', progress: { percent: progress.percent, transferred: progress.transferred, total: progress.total, bytesPerSecond: progress.bytesPerSecond } }));
   autoUpdater.on('update-downloaded', info => publish({ status: 'downloaded', availableVersion: info.version, progress: { percent: 100 }, error: null }));
   autoUpdater.on('error', error => { writeLog('Updater', error.stack || error.message); publish({ status: 'error', error: error.message }); });
