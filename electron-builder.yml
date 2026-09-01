@@ -1,0 +1,27 @@
+appId: com.jackyimage.studio
+productName: Jacky Image
+asar: true
+directories:
+  output: release/nsis
+  buildResources: build
+files:
+  - electron/**
+  - package.json
+extraResources:
+  - from: build/desktop-runtime
+    to: desktop-runtime
+nsis:
+  guid: B8D3A442-1A29-4B71-AB7E-E4FC6275592B
+  oneClick: false
+  perMachine: false
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  differentialPackage: true
+  artifactName: Jacky-Image-Setup-${version}.${ext}
+  createDesktopShortcut: false
+  shortcutName: Jacky Image
+publish:
+  provider: github
+  owner: jkw456852
+  repo: Jacky-image
+  releaseType: release

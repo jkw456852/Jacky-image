@@ -20,6 +20,8 @@
     "desktop:dev": "npm run desktop:prepare && npm run desktop:debug",
     "desktop:package": "node scripts/ensure-desktop-prepare.mjs && electron-forge package",
     "desktop:installer": "node scripts/build-windows-installer.mjs",
+    "desktop:release:win": "node scripts/ensure-desktop-prepare.mjs && node scripts/build-nsis-release.mjs",
+    "desktop:publish:win": "node scripts/ensure-desktop-prepare.mjs && node scripts/build-nsis-release.mjs --publish always",
     "desktop:make": "node scripts/ensure-desktop-prepare.mjs && electron-forge make --platform=win32 --arch=x64 && node scripts/build-windows-installer.mjs && node scripts/collect-electron-artifacts.mjs",
     "desktop:preview": "node scripts/remove-intelligent-conversation-residue.mjs && electron . --no-devtools",
     "desktop:debug": "node scripts/remove-intelligent-conversation-residue.mjs && electron . --devtools"
