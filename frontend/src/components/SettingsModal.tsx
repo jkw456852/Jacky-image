@@ -231,16 +231,29 @@ export function SettingsModal({ isOpen, onClose, onApiKeyChange }: SettingsModal
 
   const checkForUpdates = async () => {
     const updates = window.jackyDesktop?.updates;
-    if (!updates) return;
+    if (!updates) {
+      setUpdateState({ status: 'unsupported', error: '当前运行环境不支持在线更新' });
+      return;
+    }
     setUpdateBusy(true);
-    try { await updates.check(); } finally { setUpdateBusy(false); }
+    try {
+      const result = await updates.check();
+      if (!result.ok) setUpdateState(current => ({ ...(current || {}), status: 'unsupported', error: result.reason || '当前运行环境不支持在线更新' }));
+    } catch (error) {
+      setUpdateState(current => ({ ...(current || {}), status: 'error', error: error instanceof Error ? error.message : '检查更新失败' }));
+    } finally { setUpdateBusy(false); }
   };
 
   const downloadUpdate = async () => {
     const updates = window.jackyDesktop?.updates;
     if (!updates) return;
     setUpdateBusy(true);
-    try { await updates.download(); } finally { setUpdateBusy(false); }
+    try {
+      const result = await updates.download();
+      if (!result.ok) setUpdateState(current => ({ ...(current || {}), status: 'error', error: result.reason || '下载更新失败' }));
+    } catch (error) {
+      setUpdateState(current => ({ ...(current || {}), status: 'error', error: error instanceof Error ? error.message : '下载更新失败' }));
+    } finally { setUpdateBusy(false); }
   };
 
   useEffect(() => {
@@ -925,16 +938,17 @@ export function SettingsModal({ isOpen, onClose, onApiKeyChange }: SettingsModal
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h3 className="text-lg font-medium">Jacky Image <span className="text-xs text-muted-foreground font-normal">v{updateState?.currentVersion || process.env.NEXT_PUBLIC_APP_VERSION}</span></h3>
                 <Button type="button" variant="outline" size="sm" onClick={checkForUpdates} disabled={updateBusy || updateState?.status === 'checking'} className="gap-2">
-                  <RefreshCw className={`h-4 w-4 ${updateState?.status === 'checking' ? 'animate-spin' : ''}`} />
-                  检查更新
+                  <RefreshCw className={`h-4 w-4 ${updateBusy || updateState?.status === 'checking' ? 'animate-spin' : ''}`} />
+                  {updateBusy ? '检查中…' : '检查更新'}
                 </Button>
               </div>
               <div className="rounded-lg border p-4 space-y-3">
-                <div className="flex items-center justify-between gap-3"><span className="font-medium">软件更新</span><span className="text-xs text-muted-foreground">{updateState?.status === 'latest' ? '已是最新版本' : updateState?.status === 'error' ? '检查失败' : updateState?.status === 'downloaded' ? '更新已下载' : updateState?.status === 'available' ? `发现 v${updateState.availableVersion}` : '尚未检查'}</span></div>
+                <div className="flex items-center justify-between gap-3"><span className="font-medium">软件更新</span><span className="text-xs text-muted-foreground">{updateState?.status === 'latest' ? '已是最新版本' : updateState?.status === 'error' ? '检查失败' : updateState?.status === 'unsupported' ? '当前环境不支持' : updateState?.status === 'checking' || updateBusy ? '正在检查…' : updateState?.status === 'downloaded' ? '更新已下载' : updateState?.status === 'downloading' ? '正在下载…' : updateState?.status === 'available' ? `发现 v${updateState.availableVersion}` : '尚未检查'}</span></div>
                 {updateState?.status === 'available' && <Button type="button" size="sm" onClick={downloadUpdate} disabled={updateBusy} className="gap-2"><Download className="h-4 w-4" />下载更新</Button>}
                 {updateState?.status === 'downloading' && <p className="text-xs text-muted-foreground">正在下载更新 {Math.round(updateState.progress?.percent || 0)}%</p>}
                 {updateState?.status === 'downloaded' && <Button type="button" size="sm" onClick={() => void window.jackyDesktop?.updates?.install()} className="gap-2"><Download className="h-4 w-4" />重启并安装</Button>}
                 {updateState?.status === 'error' && <p className="text-xs text-destructive">{updateState.error}</p>}
+                {updateState?.status === 'unsupported' && <p className="text-xs text-muted-foreground">{updateState.error || '请使用 Windows 正式安装版检查更新。'}</p>}
                 {updateState?.releaseNotes && <div className="rounded-md bg-muted/50 p-3"><p className="mb-1 text-xs font-medium">{updateState.releaseName || `v${updateState.availableVersion} 更新内容`}</p><div className="whitespace-pre-wrap text-xs leading-5 text-muted-foreground">{typeof updateState.releaseNotes === 'string' ? updateState.releaseNotes : JSON.stringify(updateState.releaseNotes)}</div></div>}
               </div>
               <details className="group rounded-lg bg-muted/50 p-3">

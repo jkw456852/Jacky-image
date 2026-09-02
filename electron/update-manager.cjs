@@ -27,7 +27,14 @@ function createUpdateManager({ app, getMainWindow, stopBackend, beginUpdateQuit,
   autoUpdater.on('error', error => { writeLog('Updater', error.stack || error.message); publish({ status: 'error', error: error.message }); });
   return {
     getState: () => ({ ...state }),
-    check: async () => { if (!app.isPackaged || process.platform !== 'win32') return { ok: false, reason: 'Updates require a packaged Windows build' }; await autoUpdater.checkForUpdates(); return { ok: true }; },
+    check: async () => {
+      if (!app.isPackaged || process.platform !== 'win32') {
+        publish({ status: 'unsupported', error: '在线更新仅适用于 Windows 正式打包版' });
+        return { ok: false, reason: 'Updates require a packaged Windows build' };
+      }
+      await autoUpdater.checkForUpdates();
+      return { ok: true };
+    },
     download: async () => { await autoUpdater.downloadUpdate(); return { ok: true }; },
     install: async () => { await stopBackend(); beginUpdateQuit(); autoUpdater.quitAndInstall(false, true); return { ok: true }; },
   };
