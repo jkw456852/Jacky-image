@@ -29,7 +29,7 @@ import { prepareUploadImage } from '@/lib/upload-image-cache';
 import { saveBlobToDownloads } from '@/lib/local-download';
 import { clearDesktopTaskSource, publishDesktopTaskSource, type DesktopTaskStatus, type DesktopTaskSummary } from '@/lib/desktop-task-status';
 import { generateUUID } from '@/lib/uuid';
-import { buildAnglePrompt, generateSeatCoverAngle, generateSeatCoverFitting } from './seat-cover-generation-service';
+import { buildAnglePrompt, generateSeatCoverAngle, generateSeatCoverFitting, resumeSeatCoverGenerationTask } from './seat-cover-generation-service';
 import { appendCandidateSlots, candidateStatus, hasRetryableCandidates, normalizeCandidateSlots, normalizeExistingCandidates } from './candidate-utils';
 import { getVehicleReferenceLimit, scoreVehicleReferences, selectVehicleReferences } from './reference-selection';
 import { SeatMaskEditor } from './SeatMaskEditor';
@@ -518,6 +518,7 @@ export function SeatCoverGenerationWorkspace({ hasApiKey, onConfigureApiKey, sho
       angleTasks: current.angleTasks.map(item => item.id === taskId ? {
         ...item,
         status: 'queued',
+        serverTaskId: undefined,
         error: undefined,
         lastUsedReferenceImageIds: selectedReferences.map(image => image.id),
         candidates: slots.map(candidate => targetSet.has(candidate.id) ? { ...candidate, status: 'generating', error: undefined, selected: false } : candidate),
@@ -534,6 +535,7 @@ export function SeatCoverGenerationWorkspace({ hasApiKey, onConfigureApiKey, sho
         vehicleImages: selectedReferences,
         config: { ...state.globalConfig, parallelCount: targetIds.length as SeatCoverGenerationConfig['parallelCount'] },
         onProgress: message => patchAngleTask(taskId, { status: message.includes('排队') ? 'queued' : 'generating' }),
+        onTaskCreated: serverTaskId => patchAngleTask(taskId, { serverTaskId }),
       });
       setState(current => ({
         ...current,
@@ -690,6 +692,7 @@ export function SeatCoverGenerationWorkspace({ hasApiKey, onConfigureApiKey, sho
       fittingTasks: current.fittingTasks.map(item => item.id === taskId ? {
         ...item,
         status: 'queued',
+        serverTaskId: undefined,
         error: undefined,
         candidates: slots.map(candidate => targetSet.has(candidate.id) ? { ...candidate, status: 'generating', error: undefined } : candidate),
       } : item),
@@ -720,6 +723,7 @@ export function SeatCoverGenerationWorkspace({ hasApiKey, onConfigureApiKey, sho
         config,
         maskDataUrl: task.maskEnabled ? task.maskDataUrl : undefined,
         onProgress: message => patchFittingTask(taskId, { status: message.includes('排队') ? 'queued' : 'generating' }),
+        onTaskCreated: serverTaskId => patchFittingTask(taskId, { serverTaskId }),
       });
       setState(current => ({
         ...current,
@@ -755,6 +759,49 @@ export function SeatCoverGenerationWorkspace({ hasApiKey, onConfigureApiKey, sho
       runningGenerationRequestsRef.current.delete(requestKey);
     }
   }, [hasApiKey, onConfigureApiKey, patchFittingTask, setState, showToast, state]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const recover = async (kind: 'angle' | 'fitting', taskId: string, serverTaskId: string, targetIds: string[]) => {
+      const requestKey = `resume:${kind}:${taskId}:${serverTaskId}`;
+      if (runningGenerationRequestsRef.current.has(requestKey)) return;
+      runningGenerationRequestsRef.current.add(requestKey);
+      try {
+        const result = await resumeSeatCoverGenerationTask(serverTaskId, message => {
+          const patch = { status: message.includes('排队') ? 'queued' as const : 'generating' as const };
+          if (kind === 'angle') patchAngleTask(taskId, patch);
+          else patchFittingTask(taskId, patch);
+        });
+        const targetSet = new Set(targetIds);
+        setState(current => {
+          const updateTask = <T extends SeatCoverAngleTask | SeatCoverFittingTask>(item: T): T => {
+            if (item.id !== taskId) return item;
+            return { ...item, serverTaskId: result.serverTaskAcked ? undefined : serverTaskId, status: 'completed', candidates: item.candidates.map(candidate => {
+              if (!targetSet.has(candidate.id)) return candidate;
+              const index = targetIds.indexOf(candidate.id);
+              const imageRef = result.imageRefs[index];
+              return imageRef ? { ...candidate, imageRef, imageUrl: result.blobUrls[index], status: 'completed' as const, error: undefined } : { ...candidate, status: 'failed' as const, error: '模型未返回这一张候选图' };
+            }) } as T;
+          };
+          return kind === 'angle'
+            ? { ...current, angleTasks: current.angleTasks.map(updateTask) as SeatCoverAngleTask[] }
+            : { ...current, fittingTasks: current.fittingTasks.map(updateTask) as SeatCoverFittingTask[] };
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : '任务恢复失败';
+        if (kind === 'angle') patchAngleTask(taskId, { status: 'failed', error: message });
+        else patchFittingTask(taskId, { status: 'failed', error: message });
+      } finally { runningGenerationRequestsRef.current.delete(requestKey); }
+    };
+    state.angleTasks.filter(task => task.serverTaskId && (task.status === 'queued' || task.status === 'generating')).forEach(task => {
+      const targetIds = task.candidates.filter(candidate => candidateStatus(candidate) === 'generating').map(candidate => candidate.id);
+      if (targetIds.length) void recover('angle', task.id, task.serverTaskId!, targetIds);
+    });
+    state.fittingTasks.filter(task => task.serverTaskId && (task.status === 'queued' || task.status === 'generating')).forEach(task => {
+      const targetIds = task.candidates.filter(candidate => candidateStatus(candidate) === 'generating').map(candidate => candidate.id);
+      if (targetIds.length) void recover('fitting', task.id, task.serverTaskId!, targetIds);
+    });
+  }, [hydrated, patchAngleTask, patchFittingTask, setState, state.angleTasks, state.fittingTasks]);
 
   const runAllFitting = useCallback(() => {
     const runnable = state.fittingTasks.filter(task => {

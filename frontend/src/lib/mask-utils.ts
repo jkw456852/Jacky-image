@@ -315,6 +315,15 @@ export async function processMaskForTarget(
     width: targetImage.naturalWidth || targetImage.width,
     height: targetImage.naturalHeight || targetImage.height,
   };
+  const maskWidth = maskImage.naturalWidth || maskImage.width;
+  const maskHeight = maskImage.naturalHeight || maskImage.height;
+  const maskAspectRatio = maskWidth / maskHeight;
+  const targetAspectRatio = targetSize.width / targetSize.height;
+  const aspectRatioDelta = Math.abs(maskAspectRatio - targetAspectRatio)
+    / Math.max(maskAspectRatio, targetAspectRatio);
+  if (aspectRatioDelta > 0.002) {
+    throw new Error(`蒙版比例与目标图片不一致：蒙版 ${maskWidth}×${maskHeight}，目标图片 ${targetSize.width}×${targetSize.height}。请使用与目标图片相同比例的蒙版。`);
+  }
   const sourceImageData = drawImageData(maskImage, targetSize.width, targetSize.height);
   const sourceMode = resolveMaskSourceMode(draft.sourceMode, draft.analysis);
   const transformed = transformMaskPixels(sourceImageData.data, {

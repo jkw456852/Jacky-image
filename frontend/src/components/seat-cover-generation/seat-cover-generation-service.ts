@@ -516,6 +516,12 @@ async function resolveResult(taskId: string, refs: string[]): Promise<SeatCoverG
   return { taskId, imageRefs, blobUrls, serverTaskAcked: !hasUncachedServerUrl };
 }
 
+async function finishSeatCoverTask(taskId: string, onProgress?: (message: string) => void): Promise<SeatCoverGenerationResult> {
+  const result = await resolveResult(taskId, await pollTask(taskId, onProgress));
+  if (result.serverTaskAcked) await ackJackyTask(taskId);
+  return result;
+}
+
 async function generateTask(
   input: {
     model: ModelId;
@@ -532,6 +538,7 @@ async function generateTask(
     maskTargetDataUrl?: string;
     imageRoles?: Array<ImageReference['role']>;
     onProgress?: (message: string) => void;
+    onTaskCreated?: (serverTaskId: string) => void;
   },
 ): Promise<SeatCoverGenerationResult> {
   if (input.images.length === 0) throw new Error('至少需要一张参考图片');
@@ -603,17 +610,13 @@ async function generateTask(
     images: requestImages.map((image, index) => toImageReference(image, input.imageRoles?.[index])),
     mask,
   });
-  let shouldAckTask = false;
-  try {
-    input.onProgress?.('任务已创建，正在排队…');
-    const result = await resolveResult(taskId, await pollTask(taskId, input.onProgress));
-    shouldAckTask = result.serverTaskAcked;
-    return result;
-  } finally {
-    if (shouldAckTask) {
-      await ackJackyTask(taskId);
-    }
-  }
+  input.onTaskCreated?.(taskId);
+  input.onProgress?.('任务已创建，正在排队…');
+  return finishSeatCoverTask(taskId, input.onProgress);
+}
+
+export function resumeSeatCoverGenerationTask(taskId: string, onProgress?: (message: string) => void): Promise<SeatCoverGenerationResult> {
+  return finishSeatCoverTask(taskId, onProgress);
 }
 
 export async function generateSeatCoverAngle(input: {
@@ -625,6 +628,7 @@ export async function generateSeatCoverAngle(input: {
   vehicleImages: SeatCoverImageAsset[];
   config: SeatCoverGenerationConfig;
   onProgress?: (message: string) => void;
+  onTaskCreated?: (serverTaskId: string) => void;
 }): Promise<SeatCoverGenerationResult> {
   const vehicleImages = capReferences(input.config.model, input.vehicleImages, 1);
   const provider = resolveImageTaskProvider(input.config.model);
@@ -657,6 +661,7 @@ export async function generateSeatCoverAngle(input: {
         : 'vehicle-reference' as const),
     ],
     onProgress: input.onProgress,
+    onTaskCreated: input.onTaskCreated,
   });
 }
 
@@ -671,6 +676,7 @@ export async function generateSeatCoverFitting(input: {
   config: SeatCoverGenerationConfig;
   maskDataUrl?: string;
   onProgress?: (message: string) => void;
+  onTaskCreated?: (serverTaskId: string) => void;
 }): Promise<SeatCoverGenerationResult> {
   const maskStrategy = input.maskDataUrl ? getMaskStrategyForModel(input.config.model) : null;
   const selected = selectCoverReferences(
@@ -690,5 +696,6 @@ export async function generateSeatCoverFitting(input: {
     maskDataUrl: input.maskDataUrl,
     maskTargetDataUrl: input.baseImage.dataUrl,
     onProgress: input.onProgress,
+    onTaskCreated: input.onTaskCreated,
   });
 }

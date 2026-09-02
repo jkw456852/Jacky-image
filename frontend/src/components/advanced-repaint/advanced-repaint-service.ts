@@ -244,6 +244,7 @@ export async function generateAdvancedRepaintRegion(input: GenerateRepaintRegion
   });
 
   const startedAt = Date.now();
+  let shouldAckTask = false;
   try {
     while (Date.now() - startedAt < POLL_TIMEOUT) {
       const task = await getJackyTask(taskId);
@@ -251,7 +252,9 @@ export async function generateAdvancedRepaintRegion(input: GenerateRepaintRegion
         const refs = task.result?.images || [];
         if (refs.length === 0) throw new Error('模型已完成任务，但没有返回图片');
         input.onProgress?.('正在下载并准备局部结果…');
-        return await resolveGeneratedImages(taskId, refs);
+        const images = await resolveGeneratedImages(taskId, refs);
+        shouldAckTask = true;
+        return images;
       }
       if (task.status === 'failed' || task.status === 'expired') {
         throw new Error(task.error || `生成任务${task.status === 'expired' ? '已过期' : '失败'}`);
@@ -261,6 +264,6 @@ export async function generateAdvancedRepaintRegion(input: GenerateRepaintRegion
     }
     throw new Error('局部生成等待超时，请稍后重试');
   } finally {
-    await ackJackyTask(taskId);
+    if (shouldAckTask) await ackJackyTask(taskId);
   }
 }

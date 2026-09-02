@@ -55,7 +55,8 @@ export function normalizeSeatCoverWorkspace(value: unknown, defaultConfig: SeatC
     status: candidate.status || (candidate.imageRef ? 'completed' : 'pending'),
   });
   const normalizeTask = <T extends SeatCoverAngleTask | SeatCoverFittingTask>(task: T): T => {
-    const interrupted = task.status === 'queued' || task.status === 'generating';
+    const running = task.status === 'queued' || task.status === 'generating';
+    const interrupted = running && !task.serverTaskId;
     const restartFailed = task.status === 'failed' && (
       task.error?.includes('软件重启后任务状态已中断') || task.error?.includes('服务器重启')
     );
@@ -132,6 +133,8 @@ async function restoreWorkspace(workspace: SeatCoverWorkspaceState): Promise<Sea
   const restoreCandidates = async <T extends SeatCoverAngleTask | SeatCoverFittingTask>(task: T): Promise<T> => {
     const candidates = await Promise.all(task.candidates.map(async (candidate, index) => {
       if (!candidate.imageRef || candidate.imageRef.startsWith('data:')) return { ...candidate, imageUrl: candidate.imageRef || candidate.imageUrl };
+      if (candidate.imageRef.startsWith('URL:')) return { ...candidate, imageUrl: candidate.imageRef.slice(4) };
+      if (candidate.imageRef.startsWith('http://') || candidate.imageRef.startsWith('https://')) return { ...candidate, imageUrl: candidate.imageRef };
       const resolved = await resolveStoredImageRef('', candidate.imageRef, index);
       return { ...candidate, imageUrl: resolved.image };
     }));
@@ -141,6 +144,8 @@ async function restoreWorkspace(workspace: SeatCoverWorkspaceState): Promise<Sea
   const fittingTasks = await Promise.all(workspace.fittingTasks.map(async task => {
     const restored = await restoreCandidates(task);
     if (!task.baseImageRef || task.baseImageRef.startsWith('data:')) return { ...restored, baseImageUrl: task.baseImageRef || task.baseImageUrl };
+    if (task.baseImageRef.startsWith('URL:')) return { ...restored, baseImageUrl: task.baseImageRef.slice(4) };
+    if (task.baseImageRef.startsWith('http://') || task.baseImageRef.startsWith('https://')) return { ...restored, baseImageUrl: task.baseImageRef };
     const base = await resolveStoredImageRef('', task.baseImageRef, 0);
     return { ...restored, baseImageUrl: base.image || task.baseImageUrl };
   }));

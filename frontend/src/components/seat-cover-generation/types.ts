@@ -56,6 +56,7 @@ export interface SeatCoverAngleTask {
   presetName: string;
   seatScope: SeatCoverScope;
   status: SeatCoverTaskStatus;
+  serverTaskId?: string;
   candidates: SeatCoverCandidate[];
   referenceSelectionMode?: SeatCoverReferenceSelectionMode;
   referenceImageIds?: string[];
@@ -75,6 +76,7 @@ export interface SeatCoverFittingTask {
   baseImageWidth?: number;
   baseImageHeight?: number;
   status: SeatCoverTaskStatus;
+  serverTaskId?: string;
   candidates: SeatCoverCandidate[];
   customConfig?: Partial<SeatCoverGenerationConfig>;
   maskEnabled?: boolean;

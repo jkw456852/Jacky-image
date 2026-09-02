@@ -177,6 +177,7 @@ export function ImageGenerationWorkbench({
   const [optimizing, setOptimizing] = useState(false);
   const [optimizeError, setOptimizeError] = useState<string | null>(null);
   const optimizeHandleRef = useRef<StreamPromptOptimizeHandle | null>(null);
+  const referenceImportBusyRef = useRef(false);
 
   const modelLimit = MODEL_IMAGE_LIMITS[model] || { max: getModelMaxRefImages(model), description: '最多 1 张参考图片' };
   const maxImages = modelLimit.max;
@@ -538,6 +539,11 @@ export function ImageGenerationWorkbench({
       return;
     }
 
+    if (referenceImportBusyRef.current) {
+      setUploadError('参考图正在处理中，请完成后再继续添加');
+      return;
+    }
+    referenceImportBusyRef.current = true;
     setLoading(true);
     setUploadError(null);
 
@@ -574,7 +580,9 @@ export function ImageGenerationWorkbench({
     setPendingFiles(prev => {
       const existingIds = new Set(prev.map(file => file.id));
       const uniqueNew = newFiles.filter(file => !existingIds.has(file.id));
-      return uniqueNew.length > 0 ? [...prev, ...uniqueNew] : prev;
+      const remainingSlots = Math.max(0, activeEffectiveMax - prev.length);
+      const accepted = uniqueNew.slice(0, remainingSlots);
+      return accepted.length > 0 ? [...prev, ...accepted] : prev;
     });
 
     if (firstDetectedRatio && pendingFiles.length === 0) {
@@ -584,6 +592,7 @@ export function ImageGenerationWorkbench({
       setUploadError(`以下图片读取失败：${failedNames.join('、')}`);
     }
     setLoading(false);
+    referenceImportBusyRef.current = false;
   }, [autoLayoutLocked, ensureReferenceModel, maskDraft, pendingFiles.length]);
 
   const handleImportAssets = useCallback(async (selectedAssets: ImageAsset[]) => {
@@ -603,6 +612,11 @@ export function ImageGenerationWorkbench({
       return;
     }
 
+    if (referenceImportBusyRef.current) {
+      setUploadError('参考图正在处理中，请完成后再继续添加');
+      return;
+    }
+    referenceImportBusyRef.current = true;
     setLoading(true);
     setUploadError(null);
 
@@ -652,7 +666,8 @@ export function ImageGenerationWorkbench({
     setPendingFiles(prev => {
       const existingIds = new Set(prev.map(file => file.id));
       const uniqueImported = importedFiles.filter(file => !existingIds.has(file.id));
-      return uniqueImported.length > 0 ? [...prev, ...uniqueImported] : prev;
+      const accepted = uniqueImported.slice(0, Math.max(0, activeEffectiveMax - prev.length));
+      return accepted.length > 0 ? [...prev, ...accepted] : prev;
     });
 
     if (firstDetectedRatio && pendingFiles.length === 0) {
@@ -665,12 +680,13 @@ export function ImageGenerationWorkbench({
       setUploadError(`以下素材导入失败：${failedNames.join('、')}`);
     }
     setLoading(false);
+    referenceImportBusyRef.current = false;
   }, [autoLayoutLocked, ensureReferenceModel, maskDraft, pendingFiles.length]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(false);
-    if (!disabled && e.dataTransfer.files.length > 0) {
+    if (!disabled && !loading && e.dataTransfer.files.length > 0) {
       void processFiles(e.dataTransfer.files);
     }
   }, [disabled, processFiles]);
