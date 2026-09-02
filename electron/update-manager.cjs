@@ -1,7 +1,20 @@
 const path = require('node:path');
-const { autoUpdater } = require('electron-updater');
 
 function createUpdateManager({ app, getMainWindow, stopBackend, beginUpdateQuit, writeLog }) {
+  let autoUpdater;
+  try {
+    ({ autoUpdater } = require('electron-updater'));
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    writeLog('Updater', `electron-updater unavailable: ${detail}`);
+    const unavailable = () => ({ ok: false, reason: 'Updater unavailable' });
+    return {
+      getState: () => ({ status: 'unsupported', currentVersion: app.getVersion(), availableVersion: null, releaseName: null, releaseNotes: null, releaseDate: null, progress: null, error: '更新组件不可用' }),
+      check: async () => unavailable(),
+      download: async () => unavailable(),
+      install: async () => unavailable(),
+    };
+  }
   let state = { status: 'idle', currentVersion: app.getVersion(), availableVersion: null, releaseName: null, releaseNotes: null, releaseDate: null, progress: null, error: null };
   const publish = patch => {
     state = { ...state, ...patch };

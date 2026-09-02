@@ -23,7 +23,6 @@ module.exports = {
       /^\/electron\/.*\.test\.cjs$/,
       /^\/frontend(?:\/|$)/,
       /^\/mastra(?:\/|$)/,
-      /^\/node_modules(?:\/|$)/,
       /^\/out(?:\/|$)/,
       /^\/release(?:\/|$)/,
       /^\/build\/desktop-runtime(?:\/|$)/,
